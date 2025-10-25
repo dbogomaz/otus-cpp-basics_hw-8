@@ -37,19 +37,19 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
      * В качестве доп. задания устраните избыточные вычисления
      */
     const size_t threadsNumber = std::max<size_t>(1, std::thread::hardware_concurrency());
-
+    // а вдруг выдастся 0? потом делить на ноль нехорошо
     const size_t maxVal = std::numeric_limits<uint32_t>::max();
     const size_t chunkSize = maxVal / threadsNumber;
     std::vector<std::thread> threads;
-    std::optional<std::vector<char>> found;
-    bool isFound{false};
+    std::optional<std::vector<char>> found;  // сюда запишем найденный вектор
+    bool isFound{false};                     // флаг, что решение уже найдено
     std::mutex mutex;
-    std::mutex isFoundMutex;
+    // std::mutex isFoundMutex;
 
     for (size_t t = 0; t < threadsNumber; ++t) {
         threads.emplace_back([t, chunkSize, threadsNumber, maxVal, &result, originalCrc32, &found,
-                              &isFound, &mutex, &isFoundMutex]() {
-            std::vector<char> local = result;
+                              &isFound, &mutex]() {
+            std::vector<char> local = result; // каждый поток работает с собственной копией
             const size_t start = t * chunkSize;
             const size_t end = (t == threadsNumber - 1)
                                    ? maxVal + 1  // верхняя граница исключена, поэтому +1
@@ -57,7 +57,10 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
 
             for (size_t i = start; i < end; ++i) {
                 {
-                    std::lock_guard<std::mutex> lock(isFoundMutex);
+                    // std::lock_guard<std::mutex> lock(isFoundMutex);
+                    //  тормозит, превращая в один поток
+                    // узкое место, хотя вряд ли потоки одновременно найдут решение
+                    //  Проверяем, не найдено ли решение в другой нити
                     if (isFound) {
                         break;
                     }
@@ -69,7 +72,8 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
 
                 if (currentCrc32 == originalCrc32) {
                     std::cout << "Success\n";
-                    std::lock_guard<std::mutex> lock(mutex);
+                    std::lock_guard<std::mutex> lock(mutex);  // защита записи в found
+                    // Запоминаем найденный вектор
                     found = local;
                     isFound = true;
                     break;
