@@ -28,9 +28,12 @@ void replaceLastFourBytes(std::vector<char>& data, uint32_t value) {
  */
 std::vector<char> hack(const std::vector<char>& original, const std::string& injection) {
     const uint32_t originalCrc32 = crc32(original.data(), original.size());
-    std::vector<char> result(original.size() + injection.size() + 4);
+    std::vector<char> result(original.size() + injection.size() + 4, 0);
     auto it = std::copy(original.begin(), original.end(), result.begin());
     std::copy(injection.begin(), injection.end(), it);
+    const uint32_t baseCrc32 = crc32(result.data(), result.size() - 4);
+    std::vector<char> tail(4, 0);
+    std::copy_n(result.end() - 4, 4, tail.begin());
 
     /*
      * Внимание: код ниже крайне не оптимален.
@@ -41,15 +44,15 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     const size_t maxVal = std::numeric_limits<uint32_t>::max();
     const size_t chunkSize = maxVal / threadsNumber;
     std::vector<std::thread> threads;
-    std::optional<std::vector<char>> found;  // сюда запишем найденный вектор
+    std::optional<uint32_t> found;  // сюда запишем найденный вектор
     bool isFound{false};                     // флаг, что решение уже найдено
     std::mutex mutex;
     // std::mutex isFoundMutex;
 
     for (size_t t = 0; t < threadsNumber; ++t) {
-        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, &result, originalCrc32, &found,
-                              &isFound, &mutex]() {
-            std::vector<char> local = result; // каждый поток работает с собственной копией
+        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, originalCrc32, &found,
+                              &isFound, &mutex, baseCrc32, &tail]() {
+            std::vector<char> local = tail;  // каждый поток работает с собственной копией
             const size_t start = t * chunkSize;
             const size_t end = (t == threadsNumber - 1)
                                    ? maxVal + 1  // верхняя граница исключена, поэтому +1
@@ -68,18 +71,18 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                 // Заменяем последние четыре байта на значение i
                 replaceLastFourBytes(local, uint32_t(i));
                 // Вычисляем CRC32 текущего вектора result
-                auto currentCrc32 = crc32(local.data(), local.size());
+                auto currentCrc32 = crc32(local.data(), 4, ~baseCrc32);
 
                 if (currentCrc32 == originalCrc32) {
                     std::cout << "Success\n";
                     std::lock_guard<std::mutex> lock(mutex);  // защита записи в found
                     // Запоминаем найденный вектор
-                    found = local;
+                    found = static_cast<uint32_t>(i);
                     isFound = true;
                     break;
                 }
                 // Отображаем прогресс
-                if (i % 1000000 == 0) {
+                 if (i % 1000000 == 0) {
                     std::cout << "Thread " << t << " progress: "
                               << static_cast<double>(i - start) / static_cast<double>(end - start)
                               << std::endl;
@@ -91,8 +94,9 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     for (auto& t : threads) {
         t.join();
     }
-    if (isFound && found.has_value()) {
-        return *found;
+    if (isFound && found) {
+        replaceLastFourBytes(result, *found);
+        return result;
     } else {
         throw std::logic_error("Can't hack");
     }
@@ -113,5 +117,20 @@ int main(int argc, char** argv) {
         std::cerr << ex.what() << '\n';
         return 2;
     }
+
+
+ 
+    //const char* d = "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123";
+    //const uint32_t v = crc32(d, 100);
+    //std::cout << "v = crc32(d, 100) - " << v << " (" << std::hex << v << std::dec << ")\n";
+    //const uint32_t q1 = crc32(d, 104);
+    //std::cout << "q1 = crc32(d, 104) - " << q1 << " (" << std::hex << q1 << std::dec << ")\n";
+    //const uint32_t q2 = crc32(d + 100, 4, ~v);
+    //std::cout << "q2 = crc32(d + 100, 4, ~v) - " << q2 << " (" << std::hex << q2 << std::dec << ")\n";
+
+
+
+
+
     return 0;
 }
