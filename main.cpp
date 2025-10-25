@@ -1,9 +1,10 @@
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
-#include <optional>
 
 #include "CRC32.hpp"
 #include "IO.hpp"
@@ -42,9 +43,12 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     std::vector<std::thread> threads;
     std::optional<std::vector<char>> found;
     bool isFound{false};
+    std::mutex mutex;
+    std::mutex isFoundMutex;
 
     for (size_t t = 0; t < threadsNumber; ++t) {
-        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, &result, originalCrc32, &found, &isFound]() {
+        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, &result, originalCrc32, &found,
+                              &isFound, &mutex, &isFoundMutex]() {
             std::vector<char> local = result;
             const size_t start = t * chunkSize;
             const size_t end = (t == threadsNumber - 1)
@@ -52,8 +56,11 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                                    : start + chunkSize;
 
             for (size_t i = start; i < end; ++i) {
-                if (isFound) {
-                    break;
+                {
+                    std::lock_guard<std::mutex> lock(isFoundMutex);
+                    if (isFound) {
+                        break;
+                    }
                 }
                 // Заменяем последние четыре байта на значение i
                 replaceLastFourBytes(local, uint32_t(i));
@@ -62,6 +69,7 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
 
                 if (currentCrc32 == originalCrc32) {
                     std::cout << "Success\n";
+                    std::lock_guard<std::mutex> lock(mutex);
                     found = local;
                     isFound = true;
                     break;
@@ -84,25 +92,6 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     } else {
         throw std::logic_error("Can't hack");
     }
-
-    // for (size_t i = 0; i < maxVal; ++i) {
-    //   // Заменяем последние четыре байта на значение i
-    //   replaceLastFourBytes(result, uint32_t(i));
-    //   // Вычисляем CRC32 текущего вектора result
-    //   auto currentCrc32 = crc32(result.data(), result.size());
-
-    //  if (currentCrc32 == originalCrc32) {
-    //    std::cout << "Success\n";
-    //    return result;
-    //  }
-    //  // Отображаем прогресс
-    //  if (i % 1000 == 0) {
-    //    std::cout << "progress: "
-    //              << static_cast<double>(i) / static_cast<double>(maxVal)
-    //              << std::endl;
-    //  }
-    //}
-    // throw std::logic_error("Can't hack");
 }
 
 int main(int argc, char** argv) {
