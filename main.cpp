@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <iostream>
 #include <limits>
 #include <mutex>
@@ -44,10 +45,9 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     const size_t maxVal = std::numeric_limits<uint32_t>::max();
     const size_t chunkSize = maxVal / threadsNumber;
     std::vector<std::thread> threads;
-    std::optional<uint32_t> found;  // сюда запишем найденное значение четырех байт
-    bool isFound{false};            // флаг, что решение уже найдено
+    std::optional<uint32_t> found;     // сюда запишем найденное значение четырех байт
+    std::atomic<bool> isFound{false};  // флаг, что решение уже найдено
     std::mutex mutex;
-    // std::mutex isFoundMutex;
 
     for (size_t t = 0; t < threadsNumber; ++t) {
         threads.emplace_back([t, chunkSize, threadsNumber, maxVal, originalCrc32, &found, &isFound,
@@ -59,14 +59,9 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                                    : start + chunkSize;
 
             for (size_t i = start; i < end; ++i) {
-                {
-                    // std::lock_guard<std::mutex> lock(isFoundMutex);
-                    //  тормозит, превращая в один поток
-                    // узкое место, хотя вряд ли потоки одновременно найдут решение
-                    //  Проверяем, не найдено ли решение в другой нити
-                    if (isFound) {
-                        break;
-                    }
+                //  Проверяем, не найдено ли решение в другой нити
+                if (isFound.load(std::memory_order_relaxed)) {
+                    break;
                 }
                 // Заменяем последние четыре байта на значение i
                 replaceLastFourBytes(local, uint32_t(i));
@@ -75,10 +70,11 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
 
                 if (currentCrc32 == originalCrc32) {
                     std::cout << "Success\n";
-                    std::lock_guard<std::mutex> lock(mutex);  // защита записи в found
-                    // Запоминаем найденное значение четырех байт
-                    found = static_cast<uint32_t>(i);  // в i хранится искомое значение
-                    isFound = true;
+                    if (!isFound.exchange(
+                            true)) {  // гарантируем, что только один поток обновит result
+                        std::lock_guard<std::mutex> lock(mutex);
+                        found = static_cast<uint32_t>(i);
+                    }
                     break;
                 }
                 // Отображаем прогресс
