@@ -50,8 +50,8 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     // std::mutex isFoundMutex;
 
     for (size_t t = 0; t < threadsNumber; ++t) {
-        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, originalCrc32, &found,
-                              &isFound, &mutex, baseCrc32, &tail]() {
+        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, originalCrc32, &found, &isFound,
+                              &mutex, baseCrc32, &tail]() {
             std::vector<char> local = tail;  // каждый поток работает с собственной копией
             const size_t start = t * chunkSize;
             const size_t end = (t == threadsNumber - 1)
@@ -77,12 +77,12 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                     std::cout << "Success\n";
                     std::lock_guard<std::mutex> lock(mutex);  // защита записи в found
                     // Запоминаем найденное значение четырех байт
-                    found = static_cast<uint32_t>(i); // в i хранится искомое значение
+                    found = static_cast<uint32_t>(i);  // в i хранится искомое значение
                     isFound = true;
                     break;
                 }
                 // Отображаем прогресс
-                 if (i % 1000000 == 0) {
+                if (i % 1000000 == 0) {
                     std::cout << "Thread " << t << " progress: "
                               << static_cast<double>(i - start) / static_cast<double>(end - start)
                               << std::endl;
@@ -92,7 +92,9 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     }
 
     for (auto& t : threads) {
-        t.join();
+        if (t.joinable()) {
+            t.join();
+        }
     }
     if (isFound && found) {
         replaceLastFourBytes(result, *found);
@@ -118,19 +120,15 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-
- 
-    //const char* d = "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123";
-    //const uint32_t v = crc32(d, 100);
-    //std::cout << "v = crc32(d, 100) - " << v << " (" << std::hex << v << std::dec << ")\n";
-    //const uint32_t q1 = crc32(d, 104);
-    //std::cout << "q1 = crc32(d, 104) - " << q1 << " (" << std::hex << q1 << std::dec << ")\n";
-    //const uint32_t q2 = crc32(d + 100, 4, ~v);
-    //std::cout << "q2 = crc32(d + 100, 4, ~v) - " << q2 << " (" << std::hex << q2 << std::dec << ")\n";
-
-
-
-
+    // const char* d =
+    // "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123";
+    // const uint32_t v = crc32(d, 100);
+    // std::cout << "v = crc32(d, 100) - " << v << " (" << std::hex << v << std::dec << ")\n";
+    // const uint32_t q1 = crc32(d, 104);
+    // std::cout << "q1 = crc32(d, 104) - " << q1 << " (" << std::hex << q1 << std::dec << ")\n";
+    // const uint32_t q2 = crc32(d + 100, 4, ~v);
+    // std::cout << "q2 = crc32(d + 100, 4, ~v) - " << q2 << " (" << std::hex << q2 << std::dec <<
+    // ")\n";
 
     return 0;
 }
