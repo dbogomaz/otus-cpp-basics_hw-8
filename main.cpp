@@ -44,8 +44,8 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     const size_t maxVal = std::numeric_limits<uint32_t>::max();
     const size_t chunkSize = maxVal / threadsNumber;
     std::vector<std::thread> threads;
-    std::optional<uint32_t> found;  // сюда запишем найденный вектор
-    bool isFound{false};                     // флаг, что решение уже найдено
+    std::optional<uint32_t> found;  // сюда запишем найденное значение четырех байт
+    bool isFound{false};            // флаг, что решение уже найдено
     std::mutex mutex;
     // std::mutex isFoundMutex;
 
@@ -70,14 +70,14 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                 }
                 // Заменяем последние четыре байта на значение i
                 replaceLastFourBytes(local, uint32_t(i));
-                // Вычисляем CRC32 текущего вектора result
+                // Вычисляем CRC32 текущего вектора с учетом базового CRC32
                 auto currentCrc32 = crc32(local.data(), 4, ~baseCrc32);
 
                 if (currentCrc32 == originalCrc32) {
                     std::cout << "Success\n";
                     std::lock_guard<std::mutex> lock(mutex);  // защита записи в found
-                    // Запоминаем найденный вектор
-                    found = static_cast<uint32_t>(i);
+                    // Запоминаем найденное значение четырех байт
+                    found = static_cast<uint32_t>(i); // в i хранится искомое значение
                     isFound = true;
                     break;
                 }
