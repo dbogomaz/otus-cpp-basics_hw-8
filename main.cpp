@@ -5,6 +5,7 @@
 
 #include "CRC32.hpp"
 #include "IO.hpp"
+#include "timer.h"
 
 /// @brief Переписывает последние 4 байта значением value
 void replaceLastFourBytes(std::vector<char> &data, uint32_t value) {
@@ -63,6 +64,7 @@ int main(int argc, char **argv) {
   }
 
   try {
+    Timer timer;
     const std::vector<char> data = readFromFile(argv[1]);
     const std::vector<char> badData = hack(data, "He-he-he");
     writeToFile(argv[2], badData);
