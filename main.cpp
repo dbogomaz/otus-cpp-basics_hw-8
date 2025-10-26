@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <mutex>
@@ -33,8 +35,6 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     auto it = std::copy(original.begin(), original.end(), result.begin());
     std::copy(injection.begin(), injection.end(), it);
     const uint32_t baseCrc32 = crc32(result.data(), result.size() - 4);
-    std::vector<char> tail(4, 0);
-    std::copy_n(result.end() - 4, 4, tail.begin());
 
     /*
      * Внимание: код ниже крайне не оптимален.
@@ -51,8 +51,7 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
 
     for (size_t t = 0; t < threadsNumber; ++t) {
         threads.emplace_back([t, chunkSize, threadsNumber, maxVal, originalCrc32, &found, &isFound,
-                              &mutex, baseCrc32, &tail]() {
-            std::vector<char> local = tail;  // каждый поток работает с собственной копией
+                              &mutex, baseCrc32]() {
             const size_t start = t * chunkSize;
             const size_t end = (t == threadsNumber - 1)
                                    ? maxVal + 1  // верхняя граница исключена, поэтому +1
@@ -63,10 +62,10 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                 if (isFound.load(std::memory_order_relaxed)) {
                     break;
                 }
-                // Заменяем последние четыре байта на значение i
-                replaceLastFourBytes(local, uint32_t(i));
+                std::array<char, 4> tail{0}; // в crc32 нужно передавать char*
+                std::memcpy(tail.data(), &i, 4);
                 // Вычисляем CRC32 текущего вектора с учетом базового CRC32
-                auto currentCrc32 = crc32(local.data(), 4, ~baseCrc32);
+                auto currentCrc32 = crc32(tail.data(), 4, ~baseCrc32);
 
                 if (currentCrc32 == originalCrc32) {
                     std::cout << "Success\n";
