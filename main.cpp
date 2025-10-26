@@ -50,19 +50,19 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
     std::mutex mutex;
 
     for (size_t t = 0; t < threadsNumber; ++t) {
-        threads.emplace_back([t, chunkSize, threadsNumber, maxVal, originalCrc32, &found, &isFound,
-                              &mutex, baseCrc32]() {
-            const size_t start = t * chunkSize;
-            const size_t end = (t == threadsNumber - 1)
-                                   ? maxVal + 1  // верхняя граница исключена, поэтому +1
-                                   : start + chunkSize;
-
+        const size_t start = t * chunkSize;
+        const size_t end = (t == threadsNumber - 1)
+                               ? maxVal + 1  // верхняя граница исключена, поэтому +1
+                               : start + chunkSize;
+                               
+        threads.emplace_back([originalCrc32, &found, &isFound,
+                              &mutex, baseCrc32, start, end]() {
             for (size_t i = start; i < end; ++i) {
                 //  Проверяем, не найдено ли решение в другой нити
                 if (isFound.load(std::memory_order_relaxed)) {
                     break;
                 }
-                std::array<char, 4> tail{0}; // в crc32 нужно передавать char*
+                std::array<char, 4> tail{0};  // в crc32 нужно передавать char*
                 std::memcpy(tail.data(), &i, 4);
                 // Вычисляем CRC32 текущего вектора с учетом базового CRC32
                 auto currentCrc32 = crc32(tail.data(), 4, ~baseCrc32);
@@ -78,7 +78,7 @@ std::vector<char> hack(const std::vector<char>& original, const std::string& inj
                 }
                 // Отображаем прогресс
                 if (i % 1000000 == 0) {
-                    std::cout << "Thread " << t << " progress: "
+                    std::cout << "Progress: "
                               << static_cast<double>(i - start) / static_cast<double>(end - start)
                               << std::endl;
                 }
